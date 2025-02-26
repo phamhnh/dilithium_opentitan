@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <string.h>
 #include "params.h"
 #include "sign.h"
 #include "packing.h"
@@ -9,7 +10,7 @@
 #include "fips202.h"
 
 /*************************************************
-* Name:        crypto_sign_keypair
+* Name:        crypto_sign_keypair_internal
 *
 * Description: Generates public and private key.
 *
@@ -17,10 +18,12 @@
 *                             array of CRYPTO_PUBLICKEYBYTES bytes)
 *              - uint8_t *sk: pointer to output private key (allocated
 *                             array of CRYPTO_SECRETKEYBYTES bytes)
+*              - uint8_t *zeta: pointer to randomness (allocated
+*                               array of SEEDBYTES bytes)
 *
 * Returns 0 (success)
 **************************************************/
-int crypto_sign_keypair(uint8_t *pk, uint8_t *sk) {
+int crypto_sign_keypair_internal(uint8_t *pk, uint8_t *sk, uint8_t *zeta) {
   uint8_t seedbuf[2*SEEDBYTES + CRHBYTES];
   uint8_t tr[TRBYTES];
   const uint8_t *rho, *rhoprime, *key;
@@ -28,8 +31,9 @@ int crypto_sign_keypair(uint8_t *pk, uint8_t *sk) {
   polyvecl s1, s1hat;
   polyveck s2, t1, t0;
 
+  /* Copy zeta to seedbuf */
   /* Get randomness for rho, rhoprime and key */
-  randombytes(seedbuf, SEEDBYTES);
+  memcpy(seedbuf, zeta, SEEDBYTES);
   seedbuf[SEEDBYTES+0] = K;
   seedbuf[SEEDBYTES+1] = L;
   shake256(seedbuf, 2*SEEDBYTES + CRHBYTES, seedbuf, SEEDBYTES+2);
@@ -62,6 +66,26 @@ int crypto_sign_keypair(uint8_t *pk, uint8_t *sk) {
   /* Compute H(rho, t1) and write secret key */
   shake256(tr, TRBYTES, pk, CRYPTO_PUBLICKEYBYTES);
   pack_sk(sk, rho, tr, key, &t0, &s1, &s2);
+
+  return 0;
+}
+
+/*************************************************
+* Name:        crypto_sign_keypair
+*
+* Description: Generates public and private key.
+*
+* Arguments:   - uint8_t *pk: pointer to output public key (allocated
+*                             array of CRYPTO_PUBLICKEYBYTES bytes)
+*              - uint8_t *sk: pointer to output private key (allocated
+*                             array of CRYPTO_SECRETKEYBYTES bytes)
+*
+* Returns 0 (success)
+**************************************************/
+int crypto_sign_keypair(uint8_t *pk, uint8_t *sk) {
+  uint8_t zeta[SEEDBYTES];
+  randombytes(zeta, SEEDBYTES);
+  crypto_sign_keypair_internal(pk, sk, zeta);
 
   return 0;
 }
